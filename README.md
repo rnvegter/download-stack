@@ -1,18 +1,20 @@
 # Download stack
 
-SABnzbd, Radarr, Sonarr, Prowlarr and Seerr in Docker, configured from a single
-`.env` file.
+SABnzbd, Radarr, Sonarr and Prowlarr in Docker, with Uptime Kuma and Dozzle for
+monitoring, configured from a single `.env` file.
 
-| App      | Role                                              | Default URL             |
-|----------|---------------------------------------------------|-------------------------|
-| SABnzbd  | Usenet downloader                                 | http://localhost:8080   |
-| Radarr   | Finds and manages movies                          | http://localhost:7878   |
-| Sonarr   | Finds and manages TV series                       | http://localhost:8989   |
-| Prowlarr | Manages indexers once and syncs them to Radarr/Sonarr | http://localhost:9696 |
-| Seerr    | Request page for movies and series                | http://localhost:5055   |
+| App         | Role                                                  | Default URL           |
+|-------------|-------------------------------------------------------|-----------------------|
+| SABnzbd     | Usenet downloader                                     | http://localhost:8080 |
+| Radarr      | Finds and manages movies                              | http://localhost:7878 |
+| Sonarr      | Finds and manages TV series                           | http://localhost:8989 |
+| Prowlarr    | Manages indexers once and syncs them to Radarr/Sonarr | http://localhost:9696 |
+| Uptime Kuma | Checks that every app is up and alerts you if not     | http://localhost:3001 |
+| Dozzle      | Live logs of all containers in the browser            | http://localhost:8888 |
 
 SABnzbd, Radarr, Sonarr and Prowlarr use [linuxserver.io](https://www.linuxserver.io/)
-images. Seerr uses the official `ghcr.io/seerr-team/seerr` image.
+images. Uptime Kuma (`louislam/uptime-kuma`) and Dozzle (`amir20/dozzle`) use
+their official images.
 
 ## Files
 
@@ -41,8 +43,6 @@ machine-specific settings, API keys and databases.
   - [OrbStack](https://orbstack.dev/) (lightweight, recommended on Mac)
   - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 - A Usenet provider account and at least one indexer.
-- **For Seerr:** a media server (Jellyfin, Plex or Emby). Seerr's setup wizard
-  won't finish without one. The other apps work without it.
 
 ## Installation
 
@@ -142,21 +142,38 @@ Add indexers here instead of in Radarr and Sonarr. Prowlarr pushes them to both.
 5. Click **Sync App Indexers**. The indexers now show up in Radarr and Sonarr
    under **Settings → Indexers**.
 
-### 5. Seerr
+## Monitoring
 
-1. Open http://localhost:5055 and follow the wizard.
-2. Sign in with and connect your media server (Jellyfin, Plex or Emby). If
-   it runs on the Mac itself rather than in this stack, use
-   `host.docker.internal` as its hostname.
-3. **Services → Radarr**:
-   - Hostname: `radarr`, Port: `7878`
-   - API Key: Radarr's key
-   - Root folder: `/data/media/movies`, pick a quality profile
-   - Tick **Default Server**
-4. **Services → Sonarr**: same with hostname `sonarr`, port `8989`, root folder
-   `/data/media/tv`.
+### Uptime Kuma
 
-Requests made in Seerr now go straight to Radarr or Sonarr.
+1. Open http://localhost:3001 and create an admin account.
+2. **Add New Monitor** for each app. Use type **HTTP(s)** and the service name,
+   so the check runs inside the Docker network:
+
+   | Name     | URL                    |
+   |----------|------------------------|
+   | SABnzbd  | `http://sabnzbd:8080`  |
+   | Radarr   | `http://radarr:7878/ping` |
+   | Sonarr   | `http://sonarr:8989/ping` |
+   | Prowlarr | `http://prowlarr:9696/ping` |
+
+   Radarr, Sonarr and Prowlarr have a `/ping` endpoint that works without
+   logging in.
+3. Optional, to watch the containers themselves: **Settings → Docker Hosts →
+   Setup Docker Host**, connection type **Socket**, path
+   `/var/run/docker.sock`. Then add monitors of type **Docker Container**.
+4. **Settings → Notifications**: add where alerts should go (Telegram,
+   Pushover, ntfy, email, ...) and enable it on your monitors.
+5. Optional: **Status Pages** gives you one overview page for the whole stack.
+
+### Dozzle
+
+Open http://localhost:8888. All containers and their live logs are listed
+there, with search. There's nothing to configure.
+
+> Dozzle has no login by default, and both Dozzle and Uptime Kuma can read the
+> Docker socket. Keep them on your home network only. Don't forward their
+> ports on your router.
 
 ## Updating the stack
 
@@ -201,7 +218,8 @@ git pull
 ### Pin or roll back a version
 
 Every image has a tag in `.env` (`SABNZBD_TAG`, `RADARR_TAG`, `SONARR_TAG`,
-`PROWLARR_TAG`, `SEERR_TAG`). To stay on a known-good version, set the tag to a
+`PROWLARR_TAG`, `UPTIME_KUMA_TAG`, `DOZZLE_TAG`). Uptime Kuma is set to `2`,
+which follows version 2 updates but won't jump to a future major version. To stay on a known-good version, set the tag to a
 specific release instead of `latest`, then run `docker compose up -d`:
 
 ```
@@ -209,8 +227,9 @@ RADARR_TAG=5.14.0
 ```
 
 Find available tags on the image's page on
-[linuxserver.io](https://docs.linuxserver.io/) or
-[Seerr's GitHub packages](https://github.com/seerr-team/seerr/pkgs/container/seerr).
+[linuxserver.io](https://docs.linuxserver.io/) or Docker Hub
+([uptime-kuma](https://hub.docker.com/r/louislam/uptime-kuma/tags),
+[dozzle](https://hub.docker.com/r/amir20/dozzle/tags)).
 
 ### Back up before a big update
 
@@ -236,9 +255,6 @@ docker compose down             # stop and remove containers (config and data ar
 
 - **Permission errors on files:** make sure `PUID`/`PGID` in `.env` match the
   owner of `config/` and `data/` (`id -u`, `id -g`). Re-run `./setup.sh`.
-- **Seerr won't start on Linux (permission denied on `/app/config`):** Seerr
-  runs as UID 1000 and ignores `PUID`/`PGID`. Run
-  `sudo chown -R 1000:1000 config/seerr`. Not needed on macOS.
 - **Port already in use:** change the `*_PORT` value in `.env`, then run
   `docker compose up -d`.
 - **Radarr/Sonarr copy files instead of moving them:** downloads and media must

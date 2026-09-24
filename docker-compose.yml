@@ -54,25 +54,34 @@ services:
     ports:
       - ${PROWLARR_PORT}:9696
 
-  # Seerr isn't a linuxserver image: it ignores PUID/PGID and runs as UID 1000.
-  seerr:
-    image: ghcr.io/seerr-team/seerr:${SEERR_TAG}
-    container_name: seerr
-    init: true
+  # Uptime Kuma and Dozzle aren't linuxserver images and ignore PUID/PGID.
+  # Both get read-only access to the Docker socket to see container status/logs.
+  uptime-kuma:
+    image: louislam/uptime-kuma:${UPTIME_KUMA_TAG}
+    container_name: uptime-kuma
     restart: unless-stopped
     environment:
       TZ: ${TZ}
-      LOG_LEVEL: ${SEERR_LOG_LEVEL}
-      PORT: 5055
     volumes:
-      - ${CONFIG_ROOT}/seerr:/app/config
+      - ${CONFIG_ROOT}/uptime-kuma:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
-      - ${SEERR_PORT}:5055
+      - ${UPTIME_KUMA_PORT}:3001
     networks:
       - downloads
-    depends_on:
-      - radarr
-      - sonarr
+
+  dozzle:
+    image: amir20/dozzle:${DOZZLE_TAG}
+    container_name: dozzle
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - ${DOZZLE_PORT}:8080
+    networks:
+      - downloads
 
 networks:
   downloads:

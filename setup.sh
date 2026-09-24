@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Setup script for the download stack (SABnzbd, Radarr, Sonarr, Prowlarr, Seerr).
+# Setup script for the download stack (SABnzbd, Radarr, Sonarr, Prowlarr,
+# plus Uptime Kuma and Dozzle for monitoring).
 #
 # Usage: ./setup.sh [--no-start | --update]
 #   --no-start   prepare .env, folders and config, but don't start the containers
@@ -14,7 +15,7 @@ for arg in "$@"; do
   case "$arg" in
     --no-start) MODE=prepare ;;
     --update)   MODE=update ;;
-    -h|--help)  sed -n '2,7p' "$0"; exit 0 ;;
+    -h|--help)  sed -n '2,8p' "$0"; exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 1 ;;
   esac
 done
@@ -54,7 +55,10 @@ Stack is running:
   Radarr    http://localhost:${RADARR_PORT}
   Sonarr    http://localhost:${SONARR_PORT}
   Prowlarr  http://localhost:${PROWLARR_PORT}
-  Seerr     http://localhost:${SEERR_PORT}
+
+Monitoring:
+  Uptime Kuma  http://localhost:${UPTIME_KUMA_PORT}
+  Dozzle       http://localhost:${DOZZLE_PORT}
 EOF
 }
 
@@ -81,7 +85,7 @@ fi
 if [[ "$MODE" == update ]]; then
   # shellcheck disable=SC1091
   source .env
-  mkdir -p "${CONFIG_ROOT}/prowlarr" "${CONFIG_ROOT}/seerr"
+  mkdir -p "${CONFIG_ROOT}/prowlarr" "${CONFIG_ROOT}/uptime-kuma"
   docker compose config --quiet || fail "Compose file is invalid"
   info "Pulling latest images"
   docker compose pull
@@ -117,17 +121,9 @@ source .env
 info "Creating folders under ${CONFIG_ROOT} and ${DATA_ROOT}"
 mkdir -p \
   "${CONFIG_ROOT}/sabnzbd" "${CONFIG_ROOT}/radarr" "${CONFIG_ROOT}/sonarr" \
-  "${CONFIG_ROOT}/prowlarr" "${CONFIG_ROOT}/seerr" \
+  "${CONFIG_ROOT}/prowlarr" "${CONFIG_ROOT}/uptime-kuma" \
   "${DATA_ROOT}/usenet/incomplete" "${DATA_ROOT}/usenet/complete" \
   "${DATA_ROOT}/media/movies" "${DATA_ROOT}/media/tv"
-
-# Seerr runs as UID 1000 inside the container. Docker Desktop and OrbStack on
-# macOS handle bind-mount ownership for you; on Linux the folder must be
-# writable by UID 1000.
-if [[ "$(uname -s)" == Linux && "$(stat -c %u "${CONFIG_ROOT}/seerr")" != 1000 ]]; then
-  warn "Seerr needs ${CONFIG_ROOT}/seerr owned by UID 1000. Run:"
-  warn "    sudo chown -R 1000:1000 ${CONFIG_ROOT}/seerr"
-fi
 
 # --- Validate ------------------------------------------------------
 info "Validating docker-compose.yml"
