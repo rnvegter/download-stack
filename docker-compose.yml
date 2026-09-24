@@ -1,0 +1,79 @@
+# All values come from .env (loaded automatically by Docker Compose).
+
+x-common: &common
+  restart: unless-stopped
+  environment:
+    PUID: ${PUID}
+    PGID: ${PGID}
+    TZ: ${TZ}
+    UMASK: ${UMASK}
+  networks:
+    - downloads
+
+services:
+  sabnzbd:
+    <<: *common
+    image: lscr.io/linuxserver/sabnzbd:${SABNZBD_TAG}
+    container_name: sabnzbd
+    volumes:
+      - ${CONFIG_ROOT}/sabnzbd:/config
+      - ${DATA_ROOT}:/data
+    ports:
+      - ${SABNZBD_PORT}:8080
+
+  radarr:
+    <<: *common
+    image: lscr.io/linuxserver/radarr:${RADARR_TAG}
+    container_name: radarr
+    volumes:
+      - ${CONFIG_ROOT}/radarr:/config
+      - ${DATA_ROOT}:/data
+    ports:
+      - ${RADARR_PORT}:7878
+    depends_on:
+      - sabnzbd
+
+  sonarr:
+    <<: *common
+    image: lscr.io/linuxserver/sonarr:${SONARR_TAG}
+    container_name: sonarr
+    volumes:
+      - ${CONFIG_ROOT}/sonarr:/config
+      - ${DATA_ROOT}:/data
+    ports:
+      - ${SONARR_PORT}:8989
+    depends_on:
+      - sabnzbd
+
+  prowlarr:
+    <<: *common
+    image: lscr.io/linuxserver/prowlarr:${PROWLARR_TAG}
+    container_name: prowlarr
+    volumes:
+      - ${CONFIG_ROOT}/prowlarr:/config
+    ports:
+      - ${PROWLARR_PORT}:9696
+
+  # Seerr isn't a linuxserver image: it ignores PUID/PGID and runs as UID 1000.
+  seerr:
+    image: ghcr.io/seerr-team/seerr:${SEERR_TAG}
+    container_name: seerr
+    init: true
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      LOG_LEVEL: ${SEERR_LOG_LEVEL}
+      PORT: 5055
+    volumes:
+      - ${CONFIG_ROOT}/seerr:/app/config
+    ports:
+      - ${SEERR_PORT}:5055
+    networks:
+      - downloads
+    depends_on:
+      - radarr
+      - sonarr
+
+networks:
+  downloads:
+    name: ${COMPOSE_PROJECT_NAME}
