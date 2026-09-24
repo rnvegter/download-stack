@@ -1,0 +1,33 @@
+# Recyclarr v8 config: syncs TRaSH Guides (https://trash-guides.info) quality
+# settings into Radarr and Sonarr.
+#
+# setup.sh copies this template to ${CONFIG_ROOT}/recyclarr/recyclarr.yml on
+# first run. Edit that copy, not this one.
+#
+# API keys come from .env (RADARR_API_KEY, SONARR_API_KEY).
+# Preview changes without applying them:
+#   docker compose run --rm recyclarr sync --preview
+
+radarr:
+  movies:
+    base_url: http://radarr:7878
+    api_key: !env_var RADARR_API_KEY
+    quality_definition:
+      type: movie
+    quality_profiles:
+      # TRaSH "HD Bluray + WEB" (720p/1080p)
+      - trash_id: d1d67249d3890e49bc12e275d989a7e9
+        reset_unmatched_scores:
+          enabled: true
+
+sonarr:
+  series:
+    base_url: http://sonarr:8989
+    api_key: !env_var SONARR_API_KEY
+    quality_definition:
+      type: series
+    quality_profiles:
+      # TRaSH "WEB-1080p"
+      - trash_id: 72dae194fc92bf828f32cde7744e51a1
+        reset_unmatched_scores:
+          enabled: true

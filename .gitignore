@@ -1,5 +1,7 @@
 .env
 config/
+config.before-restore-*/
 data/
+backups/
 *.tar.gz
 .DS_Store

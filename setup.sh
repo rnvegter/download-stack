@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Setup script for the download stack (SABnzbd, Radarr, Sonarr, Prowlarr,
-# plus Uptime Kuma and Dozzle for monitoring).
+# Bazarr, Jellyfin, Seerr, Recyclarr, plus Uptime Kuma and Dozzle).
 #
 # Usage: ./setup.sh [--no-start | --update]
 #   --no-start   prepare .env, folders and config, but don't start the containers
@@ -47,19 +47,52 @@ sync_env() {
   done < .env.example
 }
 
+# Create config/data folders and seed the Recyclarr config
+prepare_folders() {
+  info "Creating folders under ${CONFIG_ROOT} and ${DATA_ROOT}"
+  local app
+  for app in sabnzbd radarr sonarr prowlarr bazarr jellyfin seerr recyclarr uptime-kuma; do
+    mkdir -p "${CONFIG_ROOT}/${app}"
+  done
+  mkdir -p \
+    "${DATA_ROOT}/usenet/incomplete" "${DATA_ROOT}/usenet/complete" \
+    "${DATA_ROOT}/media/movies" "${DATA_ROOT}/media/tv"
+
+  if [[ ! -f "${CONFIG_ROOT}/recyclarr/recyclarr.yml" ]]; then
+    cp recyclarr/recyclarr.yml "${CONFIG_ROOT}/recyclarr/recyclarr.yml"
+    info "Created ${CONFIG_ROOT}/recyclarr/recyclarr.yml from template"
+  fi
+
+  # Seerr runs as UID 1000 inside the container. Docker Desktop and OrbStack
+  # on macOS handle bind-mount ownership for you; on Linux the folder must be
+  # writable by UID 1000.
+  if [[ "$(uname -s)" == Linux && "$(stat -c %u "${CONFIG_ROOT}/seerr")" != 1000 ]]; then
+    warn "Seerr needs ${CONFIG_ROOT}/seerr owned by UID 1000. Run:"
+    warn "    sudo chown -R 1000:1000 ${CONFIG_ROOT}/seerr"
+  fi
+}
+
 print_urls() {
   cat <<EOF
 
 Stack is running:
-  SABnzbd   http://localhost:${SABNZBD_PORT}
-  Radarr    http://localhost:${RADARR_PORT}
-  Sonarr    http://localhost:${SONARR_PORT}
-  Prowlarr  http://localhost:${PROWLARR_PORT}
+  SABnzbd      http://localhost:${SABNZBD_PORT}
+  Radarr       http://localhost:${RADARR_PORT}
+  Sonarr       http://localhost:${SONARR_PORT}
+  Prowlarr     http://localhost:${PROWLARR_PORT}
+  Bazarr       http://localhost:${BAZARR_PORT}
+  Jellyfin     http://localhost:${JELLYFIN_PORT}
+  Seerr        http://localhost:${SEERR_PORT}
 
 Monitoring:
   Uptime Kuma  http://localhost:${UPTIME_KUMA_PORT}
   Dozzle       http://localhost:${DOZZLE_PORT}
 EOF
+  if [[ -z "${RADARR_API_KEY:-}" || -z "${SONARR_API_KEY:-}" ]]; then
+    echo
+    warn "RADARR_API_KEY/SONARR_API_KEY are empty in .env, so Recyclarr can't sync yet."
+    warn "Add them after setting up Radarr/Sonarr, then run: docker compose up -d recyclarr"
+  fi
 }
 
 # --- Prerequisites -------------------------------------------------
@@ -85,7 +118,7 @@ fi
 if [[ "$MODE" == update ]]; then
   # shellcheck disable=SC1091
   source .env
-  mkdir -p "${CONFIG_ROOT}/prowlarr" "${CONFIG_ROOT}/uptime-kuma"
+  prepare_folders
   docker compose config --quiet || fail "Compose file is invalid"
   info "Pulling latest images"
   docker compose pull
@@ -117,13 +150,7 @@ fi
 # shellcheck disable=SC1091
 source .env
 
-# --- Folders -------------------------------------------------------
-info "Creating folders under ${CONFIG_ROOT} and ${DATA_ROOT}"
-mkdir -p \
-  "${CONFIG_ROOT}/sabnzbd" "${CONFIG_ROOT}/radarr" "${CONFIG_ROOT}/sonarr" \
-  "${CONFIG_ROOT}/prowlarr" "${CONFIG_ROOT}/uptime-kuma" \
-  "${DATA_ROOT}/usenet/incomplete" "${DATA_ROOT}/usenet/complete" \
-  "${DATA_ROOT}/media/movies" "${DATA_ROOT}/media/tv"
+prepare_folders
 
 # --- Validate ------------------------------------------------------
 info "Validating docker-compose.yml"

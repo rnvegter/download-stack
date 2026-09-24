@@ -54,6 +54,71 @@ services:
     ports:
       - ${PROWLARR_PORT}:9696
 
+  bazarr:
+    <<: *common
+    image: lscr.io/linuxserver/bazarr:${BAZARR_TAG}
+    container_name: bazarr
+    volumes:
+      - ${CONFIG_ROOT}/bazarr:/config
+      # Same path as inside Radarr/Sonarr, so no path mapping is needed
+      - ${DATA_ROOT}/media:/data/media
+    ports:
+      - ${BAZARR_PORT}:6767
+    depends_on:
+      - radarr
+      - sonarr
+
+  jellyfin:
+    <<: *common
+    image: lscr.io/linuxserver/jellyfin:${JELLYFIN_TAG}
+    container_name: jellyfin
+    volumes:
+      - ${CONFIG_ROOT}/jellyfin:/config
+      - ${DATA_ROOT}/media:/data/media
+    ports:
+      - ${JELLYFIN_PORT}:8096
+
+  # Seerr isn't a linuxserver image: it ignores PUID/PGID and runs as UID 1000.
+  seerr:
+    image: ghcr.io/seerr-team/seerr:${SEERR_TAG}
+    container_name: seerr
+    init: true
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      LOG_LEVEL: ${SEERR_LOG_LEVEL}
+      PORT: 5055
+    volumes:
+      - ${CONFIG_ROOT}/seerr:/app/config
+    ports:
+      - ${SEERR_PORT}:5055
+    networks:
+      - downloads
+    depends_on:
+      - jellyfin
+      - radarr
+      - sonarr
+
+  # Syncs TRaSH Guides quality settings into Radarr/Sonarr on a schedule.
+  # No web UI. Config: ${CONFIG_ROOT}/recyclarr/recyclarr.yml
+  recyclarr:
+    image: ghcr.io/recyclarr/recyclarr:${RECYCLARR_TAG}
+    container_name: recyclarr
+    restart: unless-stopped
+    user: ${PUID}:${PGID}
+    environment:
+      TZ: ${TZ}
+      CRON_SCHEDULE: ${RECYCLARR_SCHEDULE}
+      RADARR_API_KEY: ${RADARR_API_KEY}
+      SONARR_API_KEY: ${SONARR_API_KEY}
+    volumes:
+      - ${CONFIG_ROOT}/recyclarr:/config
+    networks:
+      - downloads
+    depends_on:
+      - radarr
+      - sonarr
+
   # Uptime Kuma and Dozzle aren't linuxserver images and ignore PUID/PGID.
   # Both get read-only access to the Docker socket to see container status/logs.
   uptime-kuma:
